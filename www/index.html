@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <title>Stone Paper Scissors</title>
+  <style>
+    :root {
+      --bg: #0f1020; --card: #1b1d36; --field: #12132a; --line: #33355a;
+      --text: #f2f2f7; --muted: #9a9cc0; --accent: #7c5cff;
+      --win: #2ecc71; --lose: #ff5c7a; --draw: #f5b942;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin: 0; background: var(--bg); color: var(--text); }
+    body {
+      min-height: 100vh; font-family: system-ui, -apple-system, Roboto, sans-serif;
+      display: flex; align-items: center; justify-content: center;
+      padding: calc(16px + env(safe-area-inset-top)) 16px calc(16px + env(safe-area-inset-bottom));
+    }
+    .card { width: 100%; max-width: 420px; background: var(--card); border-radius: 22px; padding: 24px; }
+    h1 { margin: 0 0 4px; font-size: 28px; text-align: center; }
+    .sub { color: var(--muted); text-align: center; margin: 0 0 20px; font-size: 14px; }
+    input {
+      width: 100%; padding: 14px; border-radius: 12px; border: 1px solid var(--line);
+      background: var(--field); color: var(--text); font-size: 16px; margin-bottom: 12px; outline: none;
+    }
+    input:focus { border-color: var(--accent); }
+    button {
+      width: 100%; padding: 14px; border: 0; border-radius: 12px; font-size: 16px;
+      font-weight: 600; background: var(--accent); color: #fff; margin-bottom: 10px;
+    }
+    button:active { transform: scale(.98); }
+    button.secondary { background: #2a2c4d; }
+    button:disabled { opacity: .45; }
+    .row { display: flex; gap: 10px; }
+    .row input { margin: 0; text-transform: uppercase; letter-spacing: 3px; }
+    .row button { width: auto; margin: 0; padding: 14px 20px; }
+    .divider { text-align: center; color: var(--muted); margin: 16px 0; font-size: 13px; }
+    .hidden { display: none !important; }
+    .code {
+      font-size: 40px; letter-spacing: 8px; font-weight: 800; text-align: center;
+      background: var(--field); border-radius: 14px; padding: 14px; margin: 8px 0 12px;
+    }
+    .scores { display: flex; gap: 10px; margin-bottom: 14px; }
+    .player { flex: 1; min-width: 0; background: var(--field); border-radius: 14px; padding: 12px; text-align: center; }
+    .player .name { font-size: 14px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .player .score { font-size: 36px; font-weight: 800; }
+    .player .status { font-size: 12px; color: var(--muted); min-height: 16px; }
+    .choices { display: flex; gap: 10px; margin: 12px 0; }
+    .choice {
+      flex: 1; font-size: 42px; padding: 16px 0; background: var(--field);
+      border: 2px solid transparent; border-radius: 16px; margin: 0;
+    }
+    .choice small { display: block; font-size: 12px; color: var(--muted); margin-top: 4px; font-weight: 500; }
+    .choice.selected { border-color: var(--accent); opacity: 1; }
+    .msg { text-align: center; min-height: 22px; margin: 8px 0; color: var(--muted); font-size: 15px; }
+    .reveal { text-align: center; font-size: 48px; min-height: 60px; }
+    .result { text-align: center; font-size: 24px; font-weight: 800; min-height: 32px; }
+    .result.win { color: var(--win); } .result.lose { color: var(--lose); } .result.draw { color: var(--draw); }
+    .error { color: var(--lose); text-align: center; min-height: 20px; font-size: 14px; margin: 4px 0 0; }
+    .spinner {
+      width: 26px; height: 26px; margin: 10px auto; border-radius: 50%;
+      border: 3px solid var(--line); border-top-color: var(--accent); animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>✊ ✋ ✌️</h1>
+    <p class="sub">Multiplayer Stone Paper Scissors</p>
+
+    <!-- Lobby -->
+    <div id="lobby">
+      <input id="name" placeholder="Your name" maxlength="20" autocomplete="off" />
+      <button id="createBtn">Create room</button>
+      <div class="divider">or join a friend</div>
+      <div class="row">
+        <input id="codeInput" placeholder="CODE" maxlength="5" autocomplete="off" autocapitalize="characters" />
+        <button id="joinBtn">Join</button>
+      </div>
+      <p class="error" id="lobbyError"></p>
+    </div>
+
+    <!-- Connecting / waiting -->
+    <div id="waiting" class="hidden">
+      <p class="sub" id="waitTitle">Share this code with your friend</p>
+      <div class="code" id="roomCode">-----</div>
+      <button id="shareBtn" class="secondary">Share code</button>
+      <div class="spinner"></div>
+      <p class="msg" id="waitMsg">Waiting for opponent…</p>
+      <button id="cancelBtn" class="secondary">Cancel</button>
+    </div>
+
+    <!-- Game -->
+    <div id="game" class="hidden">
+      <div class="scores">
+        <div class="player"><div class="name" id="meName">You</div><div class="score" id="meScore">0</div><div class="status" id="meStatus"></div></div>
+        <div class="player"><div class="name" id="oppName">Opponent</div><div class="score" id="oppScore">0</div><div class="status" id="oppStatus"></div></div>
+      </div>
+      <p class="msg" id="roundLabel">Round 1</p>
+      <div class="reveal" id="reveal"></div>
+      <div class="result" id="result"></div>
+      <div class="choices">
+        <button class="choice" data-choice="stone">✊<small>Stone</small></button>
+        <button class="choice" data-choice="paper">✋<small>Paper</small></button>
+        <button class="choice" data-choice="scissors">✌️<small>Scissors</small></button>
+      </div>
+      <p class="msg" id="gameMsg">Make your move!</p>
+      <button id="resetBtn" class="secondary">Reset scores</button>
+      <button id="leaveBtn" class="secondary">Leave game</button>
+    </div>
+  </div>
+
+  <script src="peerjs.min.js"></script>
+  <script>
+    // ---------- Config ----------
+    const PREFIX = "sps-mvp-rps-";              // namespace for peer IDs
+    const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    const BEATS = { stone: "scissors", paper: "stone", scissors: "paper" };
+    const EMOJI = { stone: "✊", paper: "✋", scissors: "✌️" };
+
+    // ---------- State ----------
+    let peer = null, conn = null, isHost = false, roomCode = "";
+    let myName = "Player", oppName = "Opponent";
+    let round = 1, myScore = 0, oppScore = 0, myPick = null, oppPick = null;
+
+    const $ = (id) => document.getElementById(id);
+    const show = (v) => ["lobby", "waiting", "game"].forEach((x) => $(x).classList.toggle("hidden", x !== v));
+
+    try { $("name").value = localStorage.getItem("rps_name") || ""; } catch (e) {}
+
+    function readName() {
+      myName = ($("name").value.trim() || "Player").slice(0, 20);
+      try { localStorage.setItem("rps_name", myName); } catch (e) {}
+    }
+    function makeCode() {
+      return Array.from({ length: 5 }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join("");
+    }
+    function lobbyError(msg) { $("lobbyError").textContent = msg; }
+
+    function cleanup() {
+      try { conn && conn.close(); } catch (e) {}
+      try { peer && peer.destroy(); } catch (e) {}
+      peer = null; conn = null;
+    }
+    function backToLobby(err) {
+      cleanup();
+      show("lobby");
+      lobbyError(err || "");
+    }
+
+    // ---------- Host ----------
+    function createRoom(attempt = 0) {
+      readName(); lobbyError("");
+      cleanup();
+      isHost = true;
+      roomCode = makeCode();
+      $("roomCode").textContent = roomCode;
+      $("waitTitle").textContent = "Share this code with your friend";
+      $("shareBtn").classList.remove("hidden");
+      $("waitMsg").textContent = "Setting up room…";
+      show("waiting");
+
+      peer = new Peer(PREFIX + roomCode);
+      peer.on("open", () => { $("waitMsg").textContent = "Waiting for opponent…"; });
+      peer.on("connection", (c) => {
+        if (conn && conn.open) { c.on("open", () => { c.send({ t: "full" }); setTimeout(() => c.close(), 300); }); return; }
+        attachConn(c);
+      });
+      peer.on("disconnected", () => { try { peer.reconnect(); } catch (e) {} });
+      peer.on("error", (err) => {
+        if (err.type === "unavailable-id" && attempt < 3) return createRoom(attempt + 1);
+        backToLobby(niceError(err));
+      });
+    }
+
+    // ---------- Guest ----------
+    function joinRoom() {
+      readName(); lobbyError("");
+      const code = $("codeInput").value.trim().toUpperCase();
+      if (code.length !== 5) return lobbyError("Enter the 5-letter room code");
+      cleanup();
+      isHost = false;
+      roomCode = code;
+      $("roomCode").textContent = code;
+      $("waitTitle").textContent = "Joining room";
+      $("shareBtn").classList.add("hidden");
+      $("waitMsg").textContent = "Connecting…";
+      show("waiting");
+
+      peer = new Peer();
+      peer.on("open", () => {
+        const c = peer.connect(PREFIX + code, { reliable: true });
+        attachConn(c);
+        setTimeout(() => { if (!conn || !conn.open) backToLobby("Couldn't connect. Check the code and try again."); }, 15000);
+      });
+      peer.on("error", (err) => backToLobby(niceError(err)));
+    }
+
+    function niceError(err) {
+      switch (err && err.type) {
+        case "peer-unavailable": return "Room not found. Check the code.";
+        case "network": case "server-error": case "socket-error": case "socket-closed":
+          return "No internet connection. Please try again.";
+        case "browser-incompatible": return "This device doesn't support online play.";
+        default: return "Something went wrong. Please try again.";
+      }
+    }
+
+    // ---------- Connection ----------
+    function attachConn(c) {
+      conn = c;
+      c.on("open", () => {
+        c.send({ t: "hello", name: myName });
+      });
+      c.on("data", onData);
+      c.on("close", onOppLeft);
+      c.on("error", onOppLeft);
+    }
+
+    function send(msg) { if (conn && conn.open) conn.send(msg); }
+
+    function onData(m) {
+      if (!m || typeof m !== "object") return;
+      if (m.t === "full") return backToLobby("Room is full.");
+      if (m.t === "hello") {
+        oppName = String(m.name || "Opponent").slice(0, 20);
+        startMatch();
+      } else if (m.t === "pick" && m.round === round && BEATS[m.choice] && !oppPick) {
+        oppPick = m.choice;
+        render();
+        maybeResolve();
+      } else if (m.t === "reset") {
+        resetScores(false);
+      } else if (m.t === "bye") {
+        onOppLeft();
+      }
+    }
+
+    function onOppLeft() {
+      if (!conn) return;
+      conn = null;
+      if (isHost && peer && !peer.destroyed) {
+        // Keep the room open for someone else
+        $("waitTitle").textContent = "Opponent left. Share the code again";
+        $("shareBtn").classList.remove("hidden");
+        $("waitMsg").textContent = "Waiting for opponent…";
+        show("waiting");
+      } else {
+        backToLobby("Opponent left the game.");
+      }
+    }
+
+    // ---------- Game ----------
+    function startMatch() {
+      round = 1; myScore = 0; oppScore = 0; myPick = null; oppPick = null;
+      $("reveal").textContent = ""; $("result").textContent = ""; $("result").className = "result";
+      $("gameMsg").textContent = "Make your move!";
+      enableChoices();
+      show("game");
+      render();
+    }
+
+    function render() {
+      $("meName").textContent = myName + " (you)";
+      $("oppName").textContent = oppName;
+      $("meScore").textContent = myScore;
+      $("oppScore").textContent = oppScore;
+      $("meStatus").textContent = myPick ? "Ready ✓" : "";
+      $("oppStatus").textContent = oppPick ? "Ready ✓" : "Choosing…";
+      $("roundLabel").textContent = "Round " + round;
+    }
+
+    function enableChoices() {
+      document.querySelectorAll(".choice").forEach((b) => { b.disabled = false; b.classList.remove("selected"); });
+    }
+
+    function pick(choice, btn) {
+      if (myPick || !conn) return;
+      myPick = choice;
+      btn.classList.add("selected");
+      document.querySelectorAll(".choice").forEach((b) => (b.disabled = true));
+      $("gameMsg").textContent = oppPick ? "" : "Waiting for opponent…";
+      send({ t: "pick", round, choice });
+      render();
+      maybeResolve();
+    }
+
+    function maybeResolve() {
+      if (!myPick || !oppPick) return;
+      const el = $("result");
+      el.className = "result";
+      $("reveal").textContent = EMOJI[myPick] + "  vs  " + EMOJI[oppPick];
+      if (myPick === oppPick) { el.textContent = "Draw!"; el.classList.add("draw"); }
+      else if (BEATS[myPick] === oppPick) { myScore++; el.textContent = "You win! 🎉"; el.classList.add("win"); }
+      else { oppScore++; el.textContent = "You lose 😅"; el.classList.add("lose"); }
+      if (navigator.vibrate) { try { navigator.vibrate(60); } catch (e) {} }
+      round++; myPick = null; oppPick = null;
+      $("gameMsg").textContent = "Next round, make your move!";
+      enableChoices();
+      render();
+    }
+
+    function resetScores(notify) {
+      round = 1; myScore = 0; oppScore = 0; myPick = null; oppPick = null;
+      $("reveal").textContent = ""; $("result").textContent = ""; $("result").className = "result";
+      $("gameMsg").textContent = "Scores reset. Make your move!";
+      enableChoices(); render();
+      if (notify) send({ t: "reset" });
+    }
+
+    // ---------- UI wiring ----------
+    $("createBtn").onclick = () => createRoom();
+    $("joinBtn").onclick = joinRoom;
+    $("codeInput").addEventListener("keydown", (e) => { if (e.key === "Enter") joinRoom(); });
+    $("cancelBtn").onclick = () => backToLobby();
+    $("leaveBtn").onclick = () => { send({ t: "bye" }); setTimeout(() => backToLobby(), 150); };
+    $("resetBtn").onclick = () => resetScores(true);
+    document.querySelectorAll(".choice").forEach((b) => (b.onclick = () => pick(b.dataset.choice, b)));
+    $("shareBtn").onclick = async () => {
+      const text = "Play Stone Paper Scissors with me! Room code: " + roomCode;
+      try {
+        if (navigator.share) await navigator.share({ text });
+        else { await navigator.clipboard.writeText(roomCode); $("shareBtn").textContent = "Code copied!"; }
+      } catch (e) {}
+    };
+  </script>
+</body>
+</html>
